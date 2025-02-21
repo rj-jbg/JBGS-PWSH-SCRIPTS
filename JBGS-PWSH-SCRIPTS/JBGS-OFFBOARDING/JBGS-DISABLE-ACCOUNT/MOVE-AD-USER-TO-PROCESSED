@@ -1,0 +1,6 @@
+$user = "${activityInput.LoginName}"
+
+$year = (Get-Date).year
+$Destination = "OU="+ $year + ",OU=Processed,OU=Disabled Users,DC=jbg,DC=com"
+
+Get-ADUser $user | Move-ADObject -TargetPath $Destination -Confirm:$false

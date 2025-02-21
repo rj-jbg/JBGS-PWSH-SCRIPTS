@@ -1,0 +1,92 @@
+#Imports the module for Graph Identity Directory Management
+Import-Module Microsoft.Graph.Identity.DirectoryManagement
+
+#Establish Connection to MS Graph
+Connect-MgGraph -ClientId "20008880-e68a-4cfa-b736-e957184e7407" -TenantId "a9fa6762-e303-4407-8649-94d1b78256b7" -CertificateThumbprint "1E65CB930CF66272515DFBADCD7EEC19CA0FB96F"
+
+#Gather user information from the fields on the form submission
+$username = "${activityInput.LoginName}"
+$userPrincipalName = $username + "@JBG.com"
+
+#RJ - Contrast to Corporate Rehire script which features:
+#Find user's objectID
+#$objectID = Get-MgUser -UserId $userPrincipalName | select ID
+
+#Generate a password
+$NewPassword = @{}
+$NewPassword["Password"]= "!NewPassword!"
+$NewPassword["ForceChangePasswordNextSignIn"] = $True
+
+#Define license assignments
+$enterprisepack = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'ENTERPRISEPACK'
+$ems = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'EMS'
+$Licenses = @(
+    @{SkuId = $enterprisepack.SkuId},
+    @{SkuId = $ems.SkuId}
+    )
+
+#Gather list of all users within the Deleted Directory
+$DeletedItems = Get-MgDirectoryDeletedItem -DirectoryObjectId microsoft.graph.user -Property '*'
+[int]$n = $DeletedItems.AdditionalProperties['value'].count
+If ($n -eq 0) { 
+   Write-Host "No deleted accounts found - exiting"; break }
+$n = $n-1
+[int]$i
+$Report = [System.Collections.Generic.List[Object]]::new()
+For ($i = 0; $i -le $n; $i++) {
+    $Command = "$" + "DeletedItems.AdditionalProperties" + "['value'][$i]"
+    $Item = Invoke-Expression $Command
+    $UID = $Item['id'].replace('-', '')
+    $UPN = $Item['userPrincipalName']
+    $UpdatedUPN = $UPN.trim($uid)
+    $ReportLine = [PSCustomObject][Ordered]@{ 
+           UserId   = $Item['id']
+           Name     = $Item['displayName']
+           userPrincipalName = $UpdatedUPN
+           }
+    $Report.Add($ReportLine)
+}
+
+#Check whether user exists in the Deleted Directory
+$ID = $Report | where {$_.userPrincipalName -like $userPrincipalName} | select -ExpandProperty userID
+
+#Check whether user is active in Azure AD
+$test = get-mguser -UserId $userPrincipalName -erroraction Ignore
+if ($test -ne $null){
+
+#If user is active, set the usage location and relicense the account
+Update-MgUser -UserID $userPrincipalName -UsageLocation US
+Set-MgUserLicense -UserId $userPrincipalName -AddLicenses $Licenses -RemoveLicenses @()
+
+}
+
+##If user is not active, continue to "ElseIf" condition below##
+
+elseif ($ID -ne $null){
+
+#If user is found in Deleted Directory, restore and relicense the account
+Restore-MgDirectoryDeletedItem -DirectoryObjectId $ID
+Update-MgUser -UserID $userPrincipalName -UsageLocation US
+Set-MgUserLicense -UserId $userPrincipalName -AddLicenses $Licenses -RemoveLicenses @()
+
+}
+
+##If user is not in the Deleted Directory, continue to "Else" condition below##
+
+else {
+
+#If no user is found, create a new account with the following values
+$firstName = "${activityInput.FirstName}"
+$lastName = "${activityInput.LastName}"
+$name = $firstName + " " + $lastName
+$username = "${activityInput.LoginName}"
+#RJ - remove .mail
+$userPrincipalName = $username + "@JBGR.mail.onmicrosoft.com"
+New-MgUser -DisplayName $name -GivenName $firstName -Surname $lastName -UserPrincipalName $userPrincipalName -MailNickname $username -PasswordProfile $NewPassword -AccountEnabled:$true -UsageLocation US -UserType Member 
+    
+#Set the usage location and relicense the account
+
+Update-MgUser -UserID $userPrincipalName -UsageLocation US
+Set-MgUserLicense -UserId $userPrincipalName -AddLicenses $Licenses -RemoveLicenses @()
+
+}

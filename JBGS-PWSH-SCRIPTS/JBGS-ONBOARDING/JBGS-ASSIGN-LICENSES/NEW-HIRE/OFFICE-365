@@ -1,0 +1,30 @@
+#Imports the module for Graph Identity Directory Management
+Import-Module Microsoft.Graph.Identity.DirectoryManagement
+
+#Establish Connection to MS Graph
+Connect-MgGraph -ClientId "20008880-e68a-4cfa-b736-e957184e7407" -TenantId "a9fa6762-e303-4407-8649-94d1b78256b7" -CertificateThumbprint "1E65CB930CF66272515DFBADCD7EEC19CA0FB96F"
+
+#Gather user's name information from the form submission
+$firstName = "${activityInput.FirstName}"
+$lastName = "${activityInput.LastName}"
+$username = "${activityInput.LoginName}"
+$name = $firstName + " " + $lastName
+$userPrincipalName = $username + "@JBGR.mail.onmicrosoft.com"
+
+#Generate a password
+$NewPassword = @{}
+$NewPassword["Password"]= "!NewPassword!"
+$NewPassword["ForceChangePasswordNextSignIn"] = $True
+
+#Define license assignments
+$enterprisepack = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'ENTERPRISEPACK'
+$ems = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'EMS'
+$mcoev = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'MCOEV'
+$Licenses = @(
+    @{SkuId = $enterprisepack.SkuId},
+    @{SkuId = $ems.SkuId}
+    )
+
+#Create and license user
+New-MgUser -DisplayName $name -GivenName $firstName -Surname $lastName -UserPrincipalName $userPrincipalName -MailNickname $username -PasswordProfile $NewPassword -AccountEnabled:$true -UsageLocation US -UserType Member 
+Set-MgUserLicense -UserId $userPrincipalName -AddLicenses $Licenses -RemoveLicenses @()

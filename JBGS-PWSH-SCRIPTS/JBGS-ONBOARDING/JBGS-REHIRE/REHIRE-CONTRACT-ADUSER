@@ -1,0 +1,39 @@
+$username = "${activityInput.LoginName}"
+$passwordGen = "${activityInput.password}"
+$password = $passwordGen | ConvertTo-SecureString -AsPlainText -Force
+$userPrincipalName = $username + "@jbg.com"
+$title = "${activityInput.title}"
+$department = "${activityInput.department}"
+$manager = "${activityInput.manager}"
+$street = "${activityInput.street}"
+$city = "${activityInput.city}"
+$state = "${activityInput.state}"
+$zip = "${activityInput.zip}"
+$co = "United States"
+$OfficeName = "${activityInput.OfficeName}"
+$endDate = "${activityInput.end_date}"
+
+Enable-ADAccount -Identity $username
+$newpwd=  "Acadia755" | ConvertTo-SecureString -AsPlainText -Force
+
+$Destination = "OU= Contractors, OU=User Accounts,DC=jbg,DC=com"
+Set-ADUser -Identity $username -Replace @{msExchHideFromAddressLists = $false} -Confirm:$false
+Get-ADUser $username | Move-ADObject -TargetPath $Destination -Confirm:$false
+Set-ADAccountExpiration -Identity $username -DateTime $endDate
+
+Add-ADGroupMember -Identity "Duo2FAProdUsers" -Members $username
+
+Set-ADAccountPassword $username -NewPassword $password
+Set-ADUser -Identity $username -Replace @{
+	Mail=$username+"@jbgsmith.com";
+	Mailnickname=$username;
+	Title = $title;
+	Department = $department;
+	Manager = "CN=" + $manager + ",OU=User Accounts,DC=jbg,DC=com";}
+Set-ADUser -Identity $username -Replace @{
+	StreetAddress = $street;	
+ 	l = $city;
+	st = $state;
+	postalcode = $zip;
+	co = $co;
+	physicalDeliveryOfficeName = $OfficeName;}

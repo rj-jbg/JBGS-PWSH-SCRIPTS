@@ -1,0 +1,25 @@
+$user = "${activityInput.LoginName}"
+Disable-ADAccount -Identity $user
+$newpwd=  "Acadia755" | ConvertTo-SecureString -AsPlainText -Force
+$date = get-date
+$ipPhone = Get-ADUser $user -properties ipPhone | %{ $_.ipPhone}
+Set-ADUser $user -Replace @{info="Phone Ext:$($ipPhone)"}
+
+$i = Get-ADUser $user -properties info | %{ $_.info}
+$Groups = Get-ADUser $user -Properties memberof | select -ExpandProperty memberof | % { Get-ADGroup $_ | select -ExpandProperty Name }
+$info = "$i`r`n" + ($Groups -join "`r`n")
+if($info.length -gt 1000){
+$info = $info.substring(0,1000)
+}
+Set-ADUser $user -Replace @{info= [string]$info}
+
+Set-ADAccountPassword $user -NewPassword $newpwd
+Set-ADAccountExpiration $user -DateTime $date
+Set-ADUser $user -clear manager,ipPhone,title,department,company
+Get-ADPrincipalGroupMembership -Identity $user | where {$_.Name -notlike "Domain Users"} |% {Remove-ADPrincipalGroupMembership -Identity $user -MemberOf $_ -Confirm:$false}
+$Destination = "OU=EmailForwarding,OU=Disabled Users,DC=jbg,DC=com"
+$Description = "Acct forwarding, follow up $(Get-Date -Date (Get-Date).AddDays(30) -Format "MM/dd/yy")"
+
+Set-ADUser -Identity $user -Replace @{msExchHideFromAddressLists = $true} -Confirm:$false
+Set-ADUser -Identity $user -Description $Description -Confirm:$false
+Get-ADUser $user | Move-ADObject -TargetPath $Destination -Confirm:$false

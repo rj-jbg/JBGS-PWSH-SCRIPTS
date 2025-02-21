@@ -1,0 +1,87 @@
+#Imports the module for Graph Identity Directory Management
+Import-Module Microsoft.Graph.Identity.DirectoryManagement
+
+#Establish connection to MS Graph
+Connect-MgGraph -ClientId "20008880-e68a-4cfa-b736-e957184e7407" -TenantId "a9fa6762-e303-4407-8649-94d1b78256b7" -CertificateThumbprint "1E65CB930CF66272515DFBADCD7EEC19CA0FB96F"
+
+#Establish connection to Exchange Online
+Connect-ExchangeOnline -CertificateThumbprint "1E65CB930CF66272515DFBADCD7EEC19CA0FB96F" -AppId "20008880-e68a-4cfa-b736-e957184e7407" -Organization "jbgr.onmicrosoft.com"
+
+#Gather user and their manager's name/email information from form
+$username = "${activityInput.LoginName}"
+$manager = "${activityInput.Manager}"
+$OOOUser = "${activityInput.OOOUser}"
+$OOOName = "${activityInput.OOOName}"
+$empName = "${activityInput.empName}"
+$userPrincipalName = $username + "@jbg.com"
+$userEmail = $username + "@jbgsmith.com"
+$managerEmail = $manager + "@jbgsmith.com"
+
+#Disable account status in Azure to Block Office access
+Update-MgUser -UserId $userPrincipalName -AccountEnabled:$false
+
+#Disable Mail Access
+Set-Casmailbox $userPrincipalName -Mapienabled $false -OWAEnabled $false -ActiveSyncEnabled $False -PopEnabled $false
+
+#Forward Email to manager
+Set-Mailbox -Identity $userEmail -ForwardingAddress $managerEmail -DeliverToMailboxAndForward $true -Type Shared
+
+#Set OOO
+Set-MailboxAutoReplyConfiguration –identity $userEmail -AutoReplyState Enabled –InternalMessage "$empName ($userEmail) no longer works at JBG SMITH.  In their absence, please contact $OOOName ($OOOUser) for assistance." –ExternalMessage "$empName ($userEmail) no longer works at JBG SMITH.  In their absence, please contact $OOOName ($OOOUser) for assistance."
+
+#Wait
+Start-Sleep -Seconds 30
+
+# Get user's assigned licenses and remove them
+$maxRetries = 3
+$retryCount = 0
+$success = $false
+$retryDelay = 5 
+$failedLicenses = @() # Holds license SKUs that fail due to dependency issues
+
+while (-not $success -and $retryCount -lt $maxRetries) {
+    try {
+        $licenses = Get-MgUserLicenseDetail -UserId $userPrincipalName -ErrorAction Stop
+
+        # Remove licenses from user
+        foreach ($license in $licenses) {
+            try {
+                Set-MgUserLicense -UserId $userPrincipalName -AddLicenses @() -RemoveLicenses $license.SkuID -ErrorAction Stop
+                Write-Host "License with SKU $($license.SkuID) removed successfully."
+            } catch {
+                # Note a dependency failure and continue
+                if ($_.Exception.Message -like "*depends on*") {
+                    Write-Host "Dependency error for license SKU $($license.SkuID)."
+                    $failedLicenses += $license.SkuID
+                } else {
+                    throw $_ # Re-throw other exceptions
+                }
+            }
+        }
+
+        # Retry failed licenses
+        if ($failedLicenses.Count -gt 0) {
+            Write-Host "Retrying removal of dependent licenses..."
+            foreach ($failedSku in $failedLicenses) {
+                try {
+                    Set-MgUserLicense -UserId $userPrincipalName -AddLicenses @() -RemoveLicenses $failedSku -ErrorAction Stop
+                    Write-Host "Dependent license with SKU $failedSku removed successfully."
+                } catch {
+                    Write-Host "Failed to remove dependent license SKU $failedSku. Please check manually."
+                }
+            }
+        }
+
+        $success = $true
+        Write-Host "All licenses removed successfully."
+    } catch {
+        $retryCount++
+        $waitTime = $retryDelay * [Math]::Pow(2, $retryCount - 1) # Exponential backoff
+        Write-Host "An error occurred: $($_.Exception.Message). Retrying in $waitTime seconds... (Attempt $retryCount of $maxRetries)"
+        Start-Sleep -Seconds $waitTime
+    }
+}
+
+if (-not $success) {
+    Write-Host "Failed to remove licenses after $maxRetries attempts. Last error message: $($_.Exception.Message). Please check manually."
+}

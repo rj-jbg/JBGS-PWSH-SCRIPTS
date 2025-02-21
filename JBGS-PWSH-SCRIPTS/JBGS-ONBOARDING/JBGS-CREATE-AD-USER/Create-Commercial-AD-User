@@ -1,0 +1,59 @@
+#Commercial AD User
+#Gather all user account information requested on form submission and create a random password
+$firstName = "${activityInput.FirstName}"
+$lastName = "${activityInput.LastName}"
+$name = $firstName + " " + $lastName
+$username = "${activityInput.LoginName}"
+$passwordGen = "${activityInput.password}"
+$password = $passwordGen | ConvertTo-SecureString -AsPlainText -Force
+$userPrincipalName = $username + "@jbg.com"
+$title = "${activityInput.title}"
+$department = "${activityInput.department}"
+$manager = "${activityInput.manager}"
+$street = "${activityInput.street}"
+$city = "${activityInput.city}"
+$state = "${activityInput.state}"
+$zip = "${activityInput.zip}"
+$co = "United States"
+$company = "JBG SMITH"
+$OfficeName = "${activityInput.OfficeName}"
+
+#Create user and set password
+New-ADUser -name $name -displayname $name -givenName $firstName -Surname $lastName -userPrincipalName $userPrincipalName -samAccountName $username -AccountPassword $password -ChangePasswordAtLogon $True -Enabled $True -Path "OU=User Accounts,DC=jbg,DC=com"
+
+#Add default AD group memberships
+Add-ADGroupMember -Identity "Mimecast-o365-1" -Members $username
+Add-ADGroupMember -Identity "Outlook PST Policy" -Members $username
+Add-ADGroupMember -Identity "SGApp-iLMS eLearning-Users" -Members $username
+Add-ADGroupMember -Identity "SGApp-Intune MDM Users" -Members $username
+Add-ADGroupMember -Identity "JBG SMITH Commercial" -Members $username
+Add-ADGroupMember -Identity "sgapp-adobeacrobatstandard-licensedusers" -Members $username
+Add-ADGroupMember -Identity "sgapp-okta-adobeenterprise" -Members $username
+Add-ADGroupMember -Identity "sgapp-okta-knowbe4" -Members $username
+Add-ADGroupMember -Identity "sgapp-okta-pingboard" -Members $username
+Add-ADGroupMember -Identity "SGApp-Okta-Zoom" -Members $username
+Add-ADGroupMember -Identity "SGApp-WVD-User" -Members $username
+
+#Set email related attributes
+Set-ADUser -Identity $username -Add @{
+	Mail=$username+"@jbgsmith.com";
+	Mailnickname=$username;
+	ProxyAddresses="smtp:"+$username+"@jbgr.mail.onmicrosoft.com";
+	TargetAddress="SMTP:"+$username+"@jbgr.mail.onmicrosoft.com";}
+Set-ADUser -Identity $username -Add @{ProxyAddresses="SMTP:"+$username+"@jbgsmith.com"}
+
+#Add title, department, and manager attributes
+Set-ADUser -Identity $username -Add @{
+	Title = $title;
+	Department = $department;
+	Manager = "CN=" + $manager + ",OU=User Accounts,DC=jbg,DC=com";
+	co = $co;
+	company = $company;}
+
+#Add location related attributes
+Set-ADUser -Identity $username -Add @{
+	StreetAddress = $street;
+ 	l = $city;
+	st = $state;
+	postalcode = $zip;
+	physicalDeliveryOfficeName = $OfficeName;}

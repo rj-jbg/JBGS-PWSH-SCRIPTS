@@ -1,0 +1,42 @@
+$firstName = "${activityInput.FirstName}"
+$lastName = "${activityInput.LastName}"
+$name = "${activityInput.full_name}"
+$username = "${activityInput.LoginName}"
+$passwordGen = "${activityInput.password}"
+$password = $passwordGen | ConvertTo-SecureString -AsPlainText -Force
+$userPrincipalName = $username + "@jbg.com"
+$title = "${activityInput.title}"
+$department = "${activityInput.department}"
+$manager = "${activityInput.manager}"
+$street = "${activityInput.street}"
+$city = "${activityInput.city}"
+$state = "${activityInput.state}"
+$zip = "${activityInput.zip}"
+$co = "United States"
+$OfficeName = "${activityInput.OfficeName}"
+$initial = "${activityInput.middle_name}"
+$displayName = $name + " (Contractor)"
+
+New-ADUser -name $name -displayname $displayName -givenName $firstName -Surname $lastName -userPrincipalName $userPrincipalName -samAccountName $username -AccountPassword $password -ChangePasswordAtLogon $True -Enabled $True -Path "OU=Contractors,OU=User Accounts,DC=jbg,DC=com"
+
+Add-ADGroupMember -Identity "Duo2FAProdUsers" -Members $username
+Add-ADGroupMember -Identity "SGApp-OKTA-Office365-jbg" -Members $username
+
+Set-ADUser -Identity $username -Add @{
+	Mail=$username+"@jbgsmith.com";
+	Mailnickname=$username;
+	ProxyAddresses="smtp:"+$username+"@jbgr.mail.onmicrosoft.com";
+	TargetAddress="SMTP:"+$username+"@jbgr.mail.onmicrosoft.com";}
+Set-ADUser -Identity $username -Add @{ProxyAddresses="SMTP:"+$username+"@jbgsmith.com"}
+Set-ADUser -Identity $username -Add @{
+	Title = $title;
+	Department = $department;
+	Manager = "CN=" + $manager + ",OU=User Accounts,DC=jbg,DC=com";
+	co = $co;}
+Set-ADUser -Identity $username -Add @{
+	StreetAddress = $street;
+ 	l = $city;
+	st = $state;
+	postalcode = $zip;
+	physicalDeliveryOfficeName = $OfficeName;}
+Set-ADUser -Identity $username -Add @{initials = $initial}

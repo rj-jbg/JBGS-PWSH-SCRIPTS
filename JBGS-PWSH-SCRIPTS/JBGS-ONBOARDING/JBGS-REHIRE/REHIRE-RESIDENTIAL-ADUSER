@@ -1,0 +1,60 @@
+#Gather all user account information requested on form submission and create a random password
+$username = "${activityInput.LoginName}"
+$passwordGen = "${activityInput.password}"
+$password = $passwordGen | ConvertTo-SecureString -AsPlainText -Force
+$userPrincipalName = $username + "@jbg.com"
+$title = "${activityInput.title}"
+$department = "${activityInput.department}"
+$manager = "${activityInput.manager}"
+$street = "${activityInput.street}"
+$city = "${activityInput.city}"
+$state = "${activityInput.state}"
+$zip = "${activityInput.zip}"
+$co = "United States"
+$company = "JBG SMITH"
+$OfficeName = "${activityInput.OfficeName}"
+
+#Enable the user account and set new random password
+Enable-ADAccount -Identity $username
+
+#Define correct OU for the user account
+$Destination = "OU=User Accounts,DC=jbg,DC=com"
+
+#Unhide user in the GAL
+Set-ADUser -Identity $username -Replace @{msExchHideFromAddressLists = $false} -Confirm:$false
+
+#Move account to the correct OU
+Get-ADUser $username | Move-ADObject -TargetPath $Destination -Confirm:$false
+
+#Add default AD group memberships
+Add-ADGroupMember -Identity "Mimecast-o365-1" -Members $username
+Add-ADGroupMember -Identity "Outlook PST Policy" -Members $username
+Add-ADGroupMember -Identity "SGApp-iLMS eLearning-Users" -Members $username
+Add-ADGroupMember -Identity "SGApp-Intune MDM Users" -Members $username
+Add-ADGroupMember -Identity "JBG SMITH Residential" -Members $username
+Add-ADGroupMember -Identity "sgapp-adobeacrobatstandard-licensedusers" -Members $username
+Add-ADGroupMember -Identity "sgapp-okta-adobeenterprise" -Members $username
+Add-ADGroupMember -Identity "sgapp-okta-knowbe4" -Members $username
+Add-ADGroupMember -Identity "SGApp-Okta-Zoom" -Members $username
+Add-ADGroupMember -Identity "SGApp-WVD-User" -Members $username
+
+#Reset account password
+Set-ADAccountPassword $username -NewPassword $password
+
+#Add mail, manager, title, and department info
+Set-ADUser -Identity $username -Replace @{
+	Mail=$username+"@jbgsmith.com";
+	Mailnickname=$username;
+	Title = $title;
+	Department = $department;
+	Manager = "CN=" + $manager + ",OU=User Accounts,DC=jbg,DC=com";}
+
+#Update location info
+Set-ADUser -Identity $username -Replace @{
+	StreetAddress = $street;	
+ 	l = $city;
+	st = $state;
+	postalcode = $zip;
+	co = $co;
+	company = $company;
+	physicalDeliveryOfficeName = $OfficeName;}

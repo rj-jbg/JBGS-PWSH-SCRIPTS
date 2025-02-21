@@ -1,0 +1,41 @@
+#Imports the module for Graph Identity Directory Management
+Import-Module Microsoft.Graph.Identity.DirectoryManagement
+
+#Establish connection to MS Graph
+Connect-MgGraph -ClientId "20008880-e68a-4cfa-b736-e957184e7407" -TenantId "a9fa6762-e303-4407-8649-94d1b78256b7" -CertificateThumbprint "1E65CB930CF66272515DFBADCD7EEC19CA0FB96F"
+
+#Establish connection to Exchange Online
+Connect-ExchangeOnline -CertificateThumbprint "1E65CB930CF66272515DFBADCD7EEC19CA0FB96F" -AppId "20008880-e68a-4cfa-b736-e957184e7407" -Organization "jbgr.onmicrosoft.com"
+
+#Gather user and their manager's name/email information from form
+$username = "${activityInput.LoginName}"
+$manager = "${activityInput.Manager}"
+$OOOUser = "${activityInput.OOOUser}"
+$OOOName = "${activityInput.OOOName}"
+$empName = "${activityInput.empName}"
+$userPrincipalName = $username + "@jbg.com"
+$userEmail = $username + "@jbgsmith.com"
+$managerEmail = $manager + "@jbgsmith.com"
+
+#Disable account status in Azure to Block Office access
+Update-MgUser -UserId $userPrincipalName -AccountEnabled:$false
+
+#Disable Mail Access
+Set-Casmailbox $userPrincipalName -Mapienabled $false -OWAEnabled $false -ActiveSyncEnabled $False -PopEnabled $false
+
+#Forward Email to manager
+Set-Mailbox -Identity $userEmail -ForwardingAddress $managerEmail -DeliverToMailboxAndForward $true -Type Shared
+
+#Set OOO
+Set-MailboxAutoReplyConfiguration –identity $userEmail -AutoReplyState Enabled –InternalMessage "$empName ($userEmail) no longer works at JBG SMITH.  In their absence, please contact $OOOName ($OOOUser) for assistance." –ExternalMessage "$empName ($userEmail) no longer works at JBG SMITH.  In their absence, please contact $OOOName ($OOOUser) for assistance."
+
+#Wait
+Start-Sleep -Seconds 30
+
+#Get user's assigned licenses 
+$licenses = Get-MgUserLicenseDetail -UserId $userPrincipalName
+
+#Remove licenses from user
+foreach ($license in $licenses){
+
+Set-MgUserLicense -UserId $userPrincipalName -AddLicenses @() -RemoveLicenses $license.SkuID}

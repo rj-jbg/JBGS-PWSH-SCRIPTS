@@ -1,0 +1,38 @@
+Import-Module MicrosoftTeams
+Import-Module MSOnline
+
+$username = "service.now.user4445@JBGR.onmicrosoft.com"
+$password = "MwSVt6R&zH?XD+c*"
+$secureStringPwd = $password | ConvertTo-SecureString -AsPlainText -Force
+$credential = New-Object System.Management.Automation.PSCredential -ArgumentList $username, $securestringpwd
+
+Connect-MicrosoftTeams -Credential $credential
+Connect-MsolService -Credential $credential
+
+
+$username = "${activityInput.username}"
+$UPN = $username + "@jbg.com"
+$number="${activityInput.phonenumber}"
+$Phone = "tel:"+$number
+
+## Remove Current Number ##
+Grant-CsOnlineVoiceRoutingPolicy -Identity $UPN -PolicyName $null
+Grant-CsTenantDialPlan -Identity $UPN -PolicyName $null
+Set-CsUser -Identity $UPN -OnPremLineUri $null -EnterpriseVoiceEnabled $False
+
+## Add License ##
+Set-MsolUserLicense -UserPrincipalName $UPN -RemoveLicenses "JBGR:MCOPSTN1"
+Set-MsolUserLicense -UserPrincipalName $UPN -AddLicenses "JBGR:MCOEV"
+
+### Begin User Provisioning ###
+
+$VrPolicyName = "EvolveIP-East"
+$TdpPolicyName = "EvolveIP-TenantDialPlan"
+
+If ((Get-CsOnlineUser $UPN).TeamsUpgradeEffectiveMode -ne "TeamsOnly") {
+  Grant-CsTeamsUpgradePolicy -Identity $UPN -PolicyName UpgradeToTeams
+}
+
+Set-CsUser -Identity $UPN -OnPremLineUri $Phone -EnterpriseVoiceEnabled $true -HostedVoiceMail $true
+Grant-CsOnlineVoiceRoutingPolicy -Identity $UPN -PolicyName $VrPolicyName
+Grant-CsTenantDialPlan -Identity $UPN -PolicyName $TdpPolicyName
